@@ -26,7 +26,7 @@ export const translations = {
     noWalletWarning: 'Buat dompet terlebih dahulu sebelum mencatat transaksi.',
     searchTrx: 'Cari transaksi...',
     // Wallets
-    walletName: 'Nama Dompet', walletType: 'Tipe', initialBalance: 'Saldo Awal (Rp)',
+    walletName: 'Nama Dompet', walletType: 'Tipe', initialBalance: 'Saldo Awal (Rp)', walletBalance: 'Saldo (Rp)',
     color: 'Warna', mainWallet: 'Jadikan dompet utama', addWallet: 'Tambah Dompet',
     editWallet: 'Edit Dompet', totalWalletBalance: 'Total Saldo Semua Dompet',
     deleteWalletConfirm: 'Hapus dompet ini?',
@@ -118,7 +118,7 @@ export const translations = {
     noWalletWarning: 'Please create a wallet before recording transactions.',
     searchTrx: 'Search transactions...',
     // Wallets
-    walletName: 'Wallet Name', walletType: 'Type', initialBalance: 'Initial Balance (Rp)',
+    walletName: 'Wallet Name', walletType: 'Type', initialBalance: 'Initial Balance (Rp)', walletBalance: 'Balance (Rp)',
     color: 'Color', mainWallet: 'Set as main wallet', addWallet: 'Add Wallet',
     editWallet: 'Edit Wallet', totalWalletBalance: 'Total Balance Across Wallets',
     deleteWalletConfirm: 'Delete this wallet?',

@@ -14,6 +14,7 @@ function SavingsForm({ onSave, onClose, userId, initial, t }) {
     name: initial?.name ?? '', target_amount: initial?.target_amount ? String(Math.round(Number(initial.target_amount))) : '',
     icon: initial?.icon ?? '🎯', color: initial?.color ?? '#22c55e',
     deadline: initial?.deadline ?? '', note: initial?.note ?? '',
+    initial_amount: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -22,8 +23,20 @@ function SavingsForm({ onSave, onClose, userId, initial, t }) {
     e.preventDefault(); setLoading(true); setError('');
     try {
       const payload = { name: form.name, target_amount: parseFloat(form.target_amount), icon: form.icon, color: form.color, deadline: form.deadline || null, note: form.note || null };
-      if (isEdit) await updateSavings(initial.id, payload);
-      else await createSavings({ ...payload, user_id: userId });
+      if (isEdit) {
+        await updateSavings(initial.id, payload);
+      } else {
+        const newSavings = await createSavings({ ...payload, user_id: userId });
+        if (form.initial_amount && parseFloat(form.initial_amount) > 0) {
+          await createSavingsTransaction({
+            savings_id: newSavings.id,
+            amount: parseFloat(form.initial_amount),
+            type: 'deposit',
+            note: 'Saldo awal',
+            trx_date: new Date().toISOString().split('T')[0],
+          });
+        }
+      }
       onSave(); onClose();
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   };
@@ -44,6 +57,13 @@ function SavingsForm({ onSave, onClose, userId, initial, t }) {
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('target')}</label>
           <RupiahInput rawValue={form.target_amount} onRawChange={v => setForm(f => ({ ...f, target_amount: v }))} className={inputCls()} required />
         </div>
+        {!isEdit && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('initialBalance')} ({t('optional')})</label>
+            <RupiahInput rawValue={form.initial_amount} onRawChange={v => setForm(f => ({ ...f, initial_amount: v }))} className={inputCls()} />
+            <p className="text-xs text-gray-400 mt-1">💡 Untuk tabungan yang sudah ada sebelum menggunakan DuitKu</p>
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('icon')}</label>
           <div className="flex flex-wrap gap-2">

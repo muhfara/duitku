@@ -32,7 +32,8 @@ function WalletForm({ existing, userId, onSave, onClose, t }) {
     e.preventDefault(); setLoading(true); setError('');
     try {
       if (existing) {
-        await updateWallet(existing.id, { name: form.name, type: form.type, color: form.color, icon: form.icon, is_default: form.is_default });
+        const balance = form.balance !== '' ? parseFloat(form.balance) : Number(existing.balance);
+        await updateWallet(existing.id, { name: form.name, type: form.type, balance, color: form.color, icon: form.icon, is_default: form.is_default });
       } else {
         const balance = form.balance ? parseFloat(form.balance) : 0;
         await createWallet({ name: form.name, type: form.type, balance, color: form.color, icon: form.icon, is_default: form.is_default, user_id: userId });
@@ -65,12 +66,10 @@ function WalletForm({ existing, userId, onSave, onClose, t }) {
             ))}
           </div>
         </div>
-        {!existing && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('initialBalance')}</label>
-            <RupiahInput rawValue={form.balance} onRawChange={v => setForm(f => ({ ...f, balance: v }))} className={inputCls()} />
-          </div>
-        )}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{existing ? t('walletBalance') : t('initialBalance')}</label>
+          <RupiahInput rawValue={form.balance} onRawChange={v => setForm(f => ({ ...f, balance: v }))} className={inputCls()} />
+        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('color')}</label>
           <div className="flex gap-2 flex-wrap">
