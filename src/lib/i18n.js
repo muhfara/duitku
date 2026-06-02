@@ -34,6 +34,8 @@ export const translations = {
     transferFrom: 'Dari Dompet', transferTo: 'Ke Dompet',
     transferAmount: 'Jumlah Transfer (Rp)', transferSuccess: 'Transfer berhasil',
     sameWalletError: 'Pilih dompet yang berbeda',
+    adminFee: 'Biaya Admin (Rp)', adminFeeNote: 'Keperluan transfer',
+    adminFeeHint: 'Dicatat sebagai pengeluaran',
     // Debts
     debt: 'Hutang', receivable: 'Piutang',
     counterparty: 'Nama Pihak', debtCategory: 'Kategori / Keperluan',
@@ -126,6 +128,8 @@ export const translations = {
     transferFrom: 'From Wallet', transferTo: 'To Wallet',
     transferAmount: 'Transfer Amount (Rp)', transferSuccess: 'Transfer successful',
     sameWalletError: 'Please choose different wallets',
+    adminFee: 'Admin Fee (Rp)', adminFeeNote: 'Transfer purpose',
+    adminFeeHint: 'Recorded as expense',
     // Debts
     debt: 'Debt', receivable: 'Receivable',
     counterparty: 'Person / Institution', debtCategory: 'Category / Purpose',

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, X, ChevronDown, ChevronUp, PiggyBank, Pencil, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { useQuery, fetchSavings, fetchSavingsTransactions, fetchWallets, createSavings, updateSavings, deleteSavings, createSavingsTransaction, adjustWalletBalance } from '../lib/useData';
+import { useQuery, fetchSavings, fetchSavingsTransactions, fetchWallets, createSavings, updateSavings, deleteSavings, createSavingsTransaction, adjustWalletBalance, createTransaction } from '../lib/useData';
 import { formatRupiah, formatDate } from '../data/dummyData';
 import { Modal, RupiahInput, Spinner, inputCls, selectCls } from '../components/shared';
 
@@ -152,15 +152,18 @@ function DeleteSavingsModal({ saving, wallets, onSave, onClose, t }) {
 }
 
 function DepositForm({ saving, wallets, onSave, onClose, t }) {
+  const { user } = useApp();
   const [type, setType] = useState('deposit');
   const [amount, setAmount] = useState('');
   const [walletId, setWalletId] = useState(wallets.find(w => w.is_default)?.id ?? wallets[0]?.id ?? '');
+  const [adminFee, setAdminFee] = useState('');
   const [note, setNote] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const maxWithdraw = Number(saving.current_amount);
   const remaining = Number(saving.target_amount) - Number(saving.current_amount);
+  const adminFeeVal = type === 'deposit' && walletId && adminFee ? parseFloat(adminFee) || 0 : 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -170,8 +173,17 @@ function DepositForm({ saving, wallets, onSave, onClose, t }) {
     try {
       await createSavingsTransaction({ savings_id: saving.id, amount: val, type, note, trx_date: date });
       if (walletId) {
-        const delta = type === 'deposit' ? -val : +val;
+        const delta = type === 'deposit' ? -(val + adminFeeVal) : +val;
         await adjustWalletBalance(walletId, delta);
+        if (adminFeeVal > 0) {
+          await createTransaction({
+            user_id: user.id, type: 'expense', amount: adminFeeVal,
+            wallet_id: walletId,
+            note: `admin transfer ${saving.name}`,
+            trx_date: date,
+            payment_method: 'transfer',
+          });
+        }
       }
       onSave(); onClose();
     } catch (e) { setError(e.message); } finally { setLoading(false); }
@@ -223,6 +235,17 @@ function DepositForm({ saving, wallets, onSave, onClose, t }) {
             </p>
           )}
         </div>
+        {type === 'deposit' && walletId && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('adminFee')} ({t('optional')})</label>
+            <RupiahInput rawValue={adminFee} onRawChange={setAdminFee} className={inputCls()} />
+            {adminFeeVal > 0 && (
+              <p className="text-xs text-gray-400 mt-1">
+                💡 {t('adminFeeHint')}: <span className="italic">"admin transfer {saving.name}"</span>
+              </p>
+            )}
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('date')}</label>
           <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputCls()} />

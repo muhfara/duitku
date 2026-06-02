@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, X, Pencil, Trash2, ArrowLeftRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { useQuery, fetchWallets, createWallet, updateWallet, deleteWallet, adjustWalletBalance } from '../lib/useData';
+import { useQuery, fetchWallets, createWallet, updateWallet, deleteWallet, adjustWalletBalance, createTransaction } from '../lib/useData';
 import { formatRupiah } from '../data/dummyData';
 import { Modal, RupiahInput, Spinner, inputCls, selectCls } from '../components/shared';
 
@@ -96,11 +96,16 @@ function WalletForm({ existing, userId, onSave, onClose, t }) {
 }
 
 function TransferForm({ wallets, onSave, onClose, t }) {
+  const { user } = useApp();
   const [fromId, setFromId] = useState(wallets.find(w => w.is_default)?.id ?? wallets[0]?.id ?? '');
   const [toId, setToId] = useState('');
   const [amount, setAmount] = useState('');
+  const [adminFee, setAdminFee] = useState('');
+  const [adminNote, setAdminNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const adminFeeVal = adminFee ? parseFloat(adminFee) || 0 : 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -108,11 +113,20 @@ function TransferForm({ wallets, onSave, onClose, t }) {
     const val = parseFloat(amount);
     if (!val || val <= 0) { setError('Jumlah tidak valid'); return; }
     const from = wallets.find(w => w.id === fromId);
-    if (Number(from?.balance) < val) { setError('Saldo tidak cukup'); return; }
+    if (Number(from?.balance) < val + adminFeeVal) { setError('Saldo tidak cukup'); return; }
     setLoading(true);
     try {
-      await adjustWalletBalance(fromId, -val);
+      await adjustWalletBalance(fromId, -(val + adminFeeVal));
       await adjustWalletBalance(toId, +val);
+      if (adminFeeVal > 0) {
+        await createTransaction({
+          user_id: user.id, type: 'expense', amount: adminFeeVal,
+          wallet_id: fromId,
+          note: `admin transfer${adminNote ? ' ' + adminNote : ''}`,
+          trx_date: new Date().toISOString().split('T')[0],
+          payment_method: 'transfer',
+        });
+      }
       onSave(); onClose();
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   };
@@ -145,6 +159,19 @@ function TransferForm({ wallets, onSave, onClose, t }) {
           <RupiahInput rawValue={amount} onRawChange={setAmount} className={inputCls()} required />
           {fromWallet && <p className="text-xs text-gray-400 mt-1">Saldo tersedia: {formatRupiah(Number(fromWallet.balance))}</p>}
         </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('adminFee')} ({t('optional')})</label>
+          <RupiahInput rawValue={adminFee} onRawChange={setAdminFee} className={inputCls()} />
+        </div>
+        {adminFeeVal > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('adminFeeNote')} ({t('optional')})</label>
+            <input value={adminNote} onChange={e => setAdminNote(e.target.value)} className={inputCls()} placeholder="nabung nikah, bayar cicilan, ..." />
+            <p className="text-xs text-gray-400 mt-1">
+              💡 {t('adminFeeHint')}: <span className="italic">"admin transfer {adminNote || '...'}"</span>
+            </p>
+          </div>
+        )}
         <div className="flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 py-2.5 rounded-lg text-sm font-medium">{t('cancel')}</button>
           <button type="submit" disabled={loading} className="flex-1 bg-green-500 hover:bg-green-600 disabled:opacity-60 text-white py-2.5 rounded-lg text-sm font-medium">
