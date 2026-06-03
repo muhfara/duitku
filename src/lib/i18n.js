@@ -36,7 +36,7 @@ export const translations = {
     sameWalletError: 'Pilih dompet yang berbeda',
     adminFee: 'Biaya Admin (Rp)', adminFeeNote: 'Keperluan transfer',
     adminFeeHint: 'Dicatat sebagai pengeluaran',
-    debtInterest: 'Bunga Hutang (Rp)',
+    debtInterest: 'Bunga Hutang (Rp)', loanInterest: 'Bunga Pinjaman (Rp)',
     // Debts
     debt: 'Hutang', receivable: 'Piutang',
     counterparty: 'Nama Pihak', debtCategory: 'Kategori / Keperluan',
@@ -131,7 +131,7 @@ export const translations = {
     sameWalletError: 'Please choose different wallets',
     adminFee: 'Admin Fee (Rp)', adminFeeNote: 'Transfer purpose',
     adminFeeHint: 'Recorded as expense',
-    debtInterest: 'Debt Interest (Rp)',
+    debtInterest: 'Debt Interest (Rp)', loanInterest: 'Loan Interest (Rp)',
     // Debts
     debt: 'Debt', receivable: 'Receivable',
     counterparty: 'Person / Institution', debtCategory: 'Category / Purpose',

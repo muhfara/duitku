@@ -198,6 +198,7 @@ function PaymentForm({ debt, wallets, onSave, onClose, t }) {
   const [walletId, setWalletId] = useState(wallets.find(w => w.is_default)?.id ?? wallets[0]?.id ?? '');
   const [adminFee, setAdminFee] = useState('');
   const [interest, setInterest] = useState('');
+  const [loanInterest, setLoanInterest] = useState('');
   const [note, setNote] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
@@ -205,6 +206,7 @@ function PaymentForm({ debt, wallets, onSave, onClose, t }) {
 
   const adminFeeVal = adminFee ? parseFloat(adminFee) || 0 : 0;
   const interestVal = interest ? parseFloat(interest) || 0 : 0;
+  const loanInterestVal = loanInterest ? parseFloat(loanInterest) || 0 : 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -229,6 +231,14 @@ function PaymentForm({ debt, wallets, onSave, onClose, t }) {
             user_id: user.id, type: 'expense', amount: interestVal,
             wallet_id: walletId,
             note: `bunga hutang ${debt.counterparty}`,
+            trx_date: date, payment_method: 'transfer',
+          });
+        }
+        if (loanInterestVal > 0) {
+          await createTransaction({
+            user_id: user.id, type: 'income', amount: loanInterestVal,
+            wallet_id: walletId,
+            note: `bunga pinjaman ${debt.counterparty}`,
             trx_date: date, payment_method: 'transfer',
           });
         }
@@ -278,15 +288,28 @@ function PaymentForm({ debt, wallets, onSave, onClose, t }) {
                 </p>
               )}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('debtInterest')} ({t('optional')})</label>
-              <RupiahInput rawValue={interest} onRawChange={setInterest} className={inputCls()} />
-              {interestVal > 0 && (
-                <p className="text-xs text-gray-400 mt-1">
-                  💡 {t('adminFeeHint')}: <span className="italic">"bunga hutang {debt.counterparty}"</span>
-                </p>
-              )}
-            </div>
+            {debt.type === 'debt' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('debtInterest')} ({t('optional')})</label>
+                <RupiahInput rawValue={interest} onRawChange={setInterest} className={inputCls()} />
+                {interestVal > 0 && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    💡 {t('adminFeeHint')}: <span className="italic">"bunga hutang {debt.counterparty}"</span>
+                  </p>
+                )}
+              </div>
+            )}
+            {debt.type === 'receivable' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('loanInterest')} ({t('optional')})</label>
+                <RupiahInput rawValue={loanInterest} onRawChange={setLoanInterest} className={inputCls()} />
+                {loanInterestVal > 0 && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    💡 Dicatat sebagai pemasukan: <span className="italic">"bunga pinjaman {debt.counterparty}"</span>
+                  </p>
+                )}
+              </div>
+            )}
           </>
         )}
         <div>
