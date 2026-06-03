@@ -21,11 +21,14 @@ function AddDebtForm({ userId, wallets, onSave, onClose, t, hasWallets }) {
     type: 'debt', counterparty: '', category: '',
     amount: '', due_date: '', note: '', wallet_id: '',
   });
+  const [adminFee, setAdminFee] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const isReceivable = form.type === 'receivable';
   const noWalletReceivable = isReceivable && !hasWallets;
+  const adminFeeVal = isReceivable && form.wallet_id && adminFee ? parseFloat(adminFee) || 0 : 0;
+  const today = new Date().toISOString().split('T')[0];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -43,9 +46,16 @@ function AddDebtForm({ userId, wallets, onSave, onClose, t, hasWallets }) {
         await createTransaction({
           user_id: userId, wallet_id: form.wallet_id,
           type: form.type === 'debt' ? 'income' : 'expense',
-          amount, trx_date: new Date().toISOString().split('T')[0],
-          note: noteTrx, category_id: null,
+          amount, trx_date: today, note: noteTrx, category_id: null,
         });
+        if (adminFeeVal > 0) {
+          await createTransaction({
+            user_id: userId, type: 'expense', amount: adminFeeVal,
+            wallet_id: form.wallet_id,
+            note: `admin transfer ${form.counterparty}`,
+            trx_date: today, payment_method: 'transfer',
+          });
+        }
       }
       onSave(); onClose();
     } catch (e) { setError(e.message); } finally { setLoading(false); }
@@ -97,6 +107,17 @@ function AddDebtForm({ userId, wallets, onSave, onClose, t, hasWallets }) {
             </p>
           )}
         </div>
+        {isReceivable && form.wallet_id && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('adminFee')} ({t('optional')})</label>
+            <RupiahInput rawValue={adminFee} onRawChange={setAdminFee} className={inputCls()} />
+            {adminFeeVal > 0 && (
+              <p className="text-xs text-gray-400 mt-1">
+                💡 {t('adminFeeHint')}: <span className="italic">"admin transfer {form.counterparty || '...'}"</span>
+              </p>
+            )}
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('dueDate')}</label>
           <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} className={inputCls()} />
@@ -172,12 +193,18 @@ function DebtEditForm({ debt, onSave, onClose, t }) {
 }
 
 function PaymentForm({ debt, wallets, onSave, onClose, t }) {
+  const { user } = useApp();
   const [amount, setAmount] = useState('');
   const [walletId, setWalletId] = useState(wallets.find(w => w.is_default)?.id ?? wallets[0]?.id ?? '');
+  const [adminFee, setAdminFee] = useState('');
+  const [interest, setInterest] = useState('');
   const [note, setNote] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const adminFeeVal = adminFee ? parseFloat(adminFee) || 0 : 0;
+  const interestVal = interest ? parseFloat(interest) || 0 : 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -186,10 +213,25 @@ function PaymentForm({ debt, wallets, onSave, onClose, t }) {
     setLoading(true);
     try {
       await createDebtPayment({ debt_id: debt.id, amount: val, pay_date: date, note });
-      // Update wallet balance directly (not as income/expense transaction)
       if (walletId) {
         const delta = debt.type === 'debt' ? -val : +val;
         await adjustWalletBalance(walletId, delta);
+        if (adminFeeVal > 0) {
+          await createTransaction({
+            user_id: user.id, type: 'expense', amount: adminFeeVal,
+            wallet_id: walletId,
+            note: `admin transfer ${debt.counterparty}`,
+            trx_date: date, payment_method: 'transfer',
+          });
+        }
+        if (interestVal > 0) {
+          await createTransaction({
+            user_id: user.id, type: 'expense', amount: interestVal,
+            wallet_id: walletId,
+            note: `bunga hutang ${debt.counterparty}`,
+            trx_date: date, payment_method: 'transfer',
+          });
+        }
       }
       onSave(); onClose();
     } catch (e) { setError(e.message); } finally { setLoading(false); }
@@ -225,6 +267,28 @@ function PaymentForm({ debt, wallets, onSave, onClose, t }) {
             </p>
           )}
         </div>
+        {walletId && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('adminFee')} ({t('optional')})</label>
+              <RupiahInput rawValue={adminFee} onRawChange={setAdminFee} className={inputCls()} />
+              {adminFeeVal > 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  💡 {t('adminFeeHint')}: <span className="italic">"admin transfer {debt.counterparty}"</span>
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('debtInterest')} ({t('optional')})</label>
+              <RupiahInput rawValue={interest} onRawChange={setInterest} className={inputCls()} />
+              {interestVal > 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  💡 {t('adminFeeHint')}: <span className="italic">"bunga hutang {debt.counterparty}"</span>
+                </p>
+              )}
+            </div>
+          </>
+        )}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('date')}</label>
           <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputCls()} />
