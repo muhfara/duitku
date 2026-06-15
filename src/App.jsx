@@ -11,6 +11,7 @@ import Budget from './pages/Budget';
 import Reports from './pages/Reports';
 import ScanBon from './pages/ScanBon';
 import Profile from './pages/Profile';
+import Categories from './pages/Categories';
 
 function PrivateRoute({ children }) {
   const { user, authLoading } = useApp();
@@ -52,6 +53,7 @@ function AppRoutes() {
                 <Route path="/budget" element={<Budget />} />
                 <Route path="/reports" element={<Reports />} />
                 <Route path="/scan" element={<ScanBon />} />
+                <Route path="/categories" element={<Categories />} />
                 <Route path="/profile" element={<Profile />} />
               </Routes>
             </Layout>

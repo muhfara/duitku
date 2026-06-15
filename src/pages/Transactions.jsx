@@ -98,9 +98,10 @@ function TransactionForm({ categories, wallets, userId, onSave, onClose, initial
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('paymentMethod')}</label>
-            <select value={form.payment_method} onChange={e => setForm(f => ({ ...f, payment_method: e.target.value }))} className={selectCls()}>
-              {PAYMENT_METHODS.map(m => <option key={m} value={m}>{payMethodLabels[m]}</option>)}
-            </select>
+            <div className="w-full border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2.5 text-sm flex items-center justify-between">
+              <span className="text-gray-700 dark:text-gray-300">{payMethodLabels[form.payment_method]}</span>
+              <span className="text-xs text-gray-400 italic">{t('autoFilled')}</span>
+            </div>
           </div>
         </div>
         <div>

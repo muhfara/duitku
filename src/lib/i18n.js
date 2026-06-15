@@ -24,7 +24,12 @@ export const translations = {
     chooseCategory: 'Pilih kategori', noWallet: 'Tanpa dompet',
     noTrxData: 'Tidak ada transaksi',
     noWalletWarning: 'Buat dompet terlebih dahulu sebelum mencatat transaksi.',
-    searchTrx: 'Cari transaksi...',
+    searchTrx: 'Cari transaksi...', autoFilled: 'otomatis',
+    // Categories
+    manageCategories: 'Kategori', addCategory: 'Tambah Kategori', editCategory: 'Edit Kategori',
+    categoryName: 'Nama Kategori', categoryIcon: 'Ikon (emoji)', categoryColor: 'Warna',
+    deleteCategoryConfirm: 'Hapus kategori ini? Transaksi terkait tidak akan terhapus.',
+    noCategoryData: 'Belum ada kategori',
     // Wallets
     walletName: 'Nama Dompet', walletType: 'Tipe', initialBalance: 'Saldo Awal (Rp)', walletBalance: 'Saldo (Rp)',
     color: 'Warna', mainWallet: 'Jadikan dompet utama', addWallet: 'Tambah Dompet',
@@ -119,7 +124,12 @@ export const translations = {
     chooseCategory: 'Choose category', noWallet: 'No wallet',
     noTrxData: 'No transactions',
     noWalletWarning: 'Please create a wallet before recording transactions.',
-    searchTrx: 'Search transactions...',
+    searchTrx: 'Search transactions...', autoFilled: 'auto',
+    // Categories
+    manageCategories: 'Categories', addCategory: 'Add Category', editCategory: 'Edit Category',
+    categoryName: 'Category Name', categoryIcon: 'Icon (emoji)', categoryColor: 'Color',
+    deleteCategoryConfirm: 'Delete this category? Related transactions will not be deleted.',
+    noCategoryData: 'No categories yet',
     // Wallets
     walletName: 'Wallet Name', walletType: 'Type', initialBalance: 'Initial Balance (Rp)', walletBalance: 'Balance (Rp)',
     color: 'Color', mainWallet: 'Set as main wallet', addWallet: 'Add Wallet',

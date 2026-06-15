@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import {
   LayoutDashboard, ArrowLeftRight, PieChart,
   ScanLine, Wallet, PiggyBank, Menu, X, ChevronRight, Settings,
-  CreditCard, Moon, Sun, Languages,
+  CreditCard, Moon, Sun, Languages, Tag,
 } from 'lucide-react';
 import logoFull from '../assets/logo-full.svg';
 
@@ -19,8 +19,9 @@ export default function Layout({ children }) {
     { path: '/wallets',      label: t('wallets'),       icon: Wallet },
     { path: '/savings',      label: t('savings'),       icon: PiggyBank },
     { path: '/debts',        label: t('debts'),         icon: CreditCard },
-    { path: '/budget',       label: t('budget'),        icon: PieChart },
-    { path: '/reports',      label: t('reports'),       icon: PieChart },
+    { path: '/budget',       label: t('budget'),            icon: PieChart },
+    { path: '/categories',   label: t('manageCategories'), icon: Tag },
+    { path: '/reports',      label: t('reports'),           icon: PieChart },
     { path: '/scan',         label: t('scan'),          icon: ScanLine },
   ];
 
@@ -28,6 +29,7 @@ export default function Layout({ children }) {
     ...navItems,
     { path: '/profile', label: t('profile') },
   ].find(n => n.path === location.pathname)?.label ?? 'DuitKu';
+
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
