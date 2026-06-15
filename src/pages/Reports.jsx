@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
-  AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { useApp } from '../context/AppContext';
-import { useQuery, fetchTransactions, fetchCategories, fetchBudgets } from '../lib/useData';
+import { useQuery, fetchTransactions, fetchCategories, fetchBudgets, fetchWallets } from '../lib/useData';
 import { formatRupiah } from '../data/dummyData';
 import { Spinner } from '../components/shared';
 
@@ -79,47 +79,53 @@ function inPeriod(trxDate, bounds) {
   return d >= bounds.startStr && d <= bounds.endStr;
 }
 
-function buildChartData(transactions, period, bounds) {
-  const filtered = transactions.filter(t => inPeriod(t.trx_date, bounds));
+function buildBalanceChartData(transactions, period, bounds, startingBalance) {
+  // Net change per day: income increases balance, expense decreases
+  const byDate = {};
+  transactions.filter(t => inPeriod(t.trx_date, bounds)).forEach(t => {
+    byDate[t.trx_date] = (byDate[t.trx_date] ?? 0) + (t.type === 'income' ? Number(t.amount) : -Number(t.amount));
+  });
 
-  const add = (map, key, t) => {
-    if (!map[key]) return;
-    map[key][t.type === 'income' ? 'income' : 'expense'] += Number(t.amount);
-  };
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   if (period === 'year') {
     const y = parseInt(bounds.startStr);
-    const map = {};
-    for (let m = 0; m < 12; m++)
-      map[`${y}-${String(m + 1).padStart(2, '0')}`] = { income: 0, expense: 0 };
-    filtered.forEach(t => add(map, t.trx_date.slice(0, 7), t));
-    return Object.entries(map).map(([k, v]) => ({
-      label: new Date(k + '-01T12:00:00').toLocaleDateString('id-ID', { month: 'short' }),
-      ...v,
-    }));
+    let bal = startingBalance;
+    return Array.from({ length: 12 }, (_, m) => {
+      const monthKey = `${y}-${String(m + 1).padStart(2, '0')}`;
+      // Only accumulate up to current month
+      if (monthKey <= todayStr.slice(0, 7)) {
+        bal += Object.entries(byDate)
+          .filter(([d]) => d.startsWith(monthKey))
+          .reduce((s, [, v]) => s + v, 0);
+      }
+      return {
+        label: new Date(`${monthKey}-01T12:00:00`).toLocaleDateString('id-ID', { month: 'short' }),
+        saldo: bal,
+      };
+    });
   }
 
-  if (period === 'month' || period === 'week') {
-    const map = {};
-    const cur = new Date(bounds.startStr + 'T12:00:00');
-    const endD = new Date(bounds.endStr + 'T12:00:00');
-    while (cur <= endD) {
-      map[cur.toISOString().slice(0, 10)] = { income: 0, expense: 0 };
-      cur.setDate(cur.getDate() + 1);
-    }
-    filtered.forEach(t => add(map, t.trx_date.slice(0, 10), t));
-    return Object.entries(map).map(([k, v]) => ({
+  // week / month: per day, stop at today
+  const result = [];
+  let bal = startingBalance;
+  const cur = new Date(bounds.startStr + 'T12:00:00');
+  const endBound = new Date(Math.min(
+    new Date(bounds.endStr + 'T12:00:00').getTime(),
+    new Date(todayStr + 'T12:00:00').getTime(),
+  ));
+  while (cur <= endBound) {
+    const d = cur.toISOString().slice(0, 10);
+    bal += byDate[d] ?? 0;
+    result.push({
       label: period === 'week'
-        ? new Date(k + 'T12:00:00').toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' })
-        : String(new Date(k + 'T12:00:00').getDate()),
-      ...v,
-    }));
+        ? cur.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' })
+        : String(cur.getDate()),
+      saldo: bal,
+    });
+    cur.setDate(cur.getDate() + 1);
   }
-
-  // day — single summary point
-  const income  = filtered.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-  const expense = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
-  return income + expense > 0 ? [{ label: 'Hari ini', income, expense }] : [];
+  return result;
 }
 
 // ─── Main component ──────────────────────────────────────────────────────────
@@ -129,6 +135,7 @@ export default function Reports() {
   const { data: transactions = [], loading } = useQuery(fetchTransactions, [user?.id]);
   const { data: categories = [] }            = useQuery(fetchCategories,   [user?.id]);
   const { data: budgets = [] }               = useQuery(fetchBudgets,      [user?.id]);
+  const { data: wallets = [] }               = useQuery(fetchWallets,      [user?.id]);
 
   const [period, setPeriod] = useState('month');
   const [offset, setOffset] = useState(0);
@@ -143,8 +150,20 @@ export default function Reports() {
   const totalIncome  = useMemo(() => periodTrx.filter(t => t.type === 'income').reduce((s, t)  => s + Number(t.amount), 0), [periodTrx]);
   const totalExpense = useMemo(() => periodTrx.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0), [periodTrx]);
 
-  const chartData = useMemo(() => buildChartData(transactions, period, bounds), [transactions, period, bounds]);
-  const hasChartData = chartData.some(d => d.income > 0 || d.expense > 0);
+  // Balance at start of period: unwind all transactions from period start onwards
+  const startingBalance = useMemo(() => {
+    const currentTotal = wallets.reduce((s, w) => s + Number(w.balance), 0);
+    const netFromPeriodStart = transactions
+      .filter(t => t.trx_date >= bounds.startStr)
+      .reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+    return currentTotal - netFromPeriodStart;
+  }, [wallets, transactions, bounds]);
+
+  const chartData = useMemo(
+    () => buildBalanceChartData(transactions, period, bounds, startingBalance),
+    [transactions, period, bounds, startingBalance],
+  );
+  const hasChartData = chartData.length > 0 && periodTrx.length > 0;
 
   const expenseByCategory = useMemo(() => {
     const map = {};
@@ -228,11 +247,14 @@ export default function Reports() {
         ))}
       </div>
 
-      {/* ── Trend chart ── */}
+      {/* ── Balance chart ── */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-700">
-        <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-sm mb-4">
-          {period === 'year' ? 'Tren Per Bulan' : period === 'month' ? 'Tren Per Hari' : period === 'week' ? 'Tren Per Hari (Minggu Ini)' : 'Ringkasan Hari Ini'}
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-sm">Grafik Saldo</h3>
+          {period === 'day' && (
+            <span className="text-xs text-gray-400">Saldo saat ini: <span className="font-semibold text-gray-700 dark:text-gray-200">{formatRupiah(wallets.reduce((s, w) => s + Number(w.balance), 0))}</span></span>
+          )}
+        </div>
 
         {period === 'day' ? (
           <div className="grid grid-cols-2 gap-4 py-2">
@@ -247,36 +269,17 @@ export default function Reports() {
           </div>
         ) : !hasChartData ? (
           <p className="text-sm text-gray-400 text-center py-8">Belum ada transaksi di periode ini</p>
-        ) : period === 'year' ? (
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="gin" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} /><stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gex" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} /><stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-              <YAxis tickFormatter={fmtY} tick={{ fontSize: 10 }} width={40} />
-              <Tooltip formatter={v => formatRupiah(v)} />
-              <Legend />
-              <Area type="monotone" dataKey="income"  stroke="#22c55e" strokeWidth={2} fill="url(#gin)" name="Pemasukan" />
-              <Area type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={2} fill="url(#gex)" name="Pengeluaran" />
-            </AreaChart>
-          </ResponsiveContainer>
         ) : (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="label" tick={{ fontSize: period === 'month' ? 9 : 11 }} interval={period === 'month' ? 4 : 0} />
               <YAxis tickFormatter={fmtY} tick={{ fontSize: 10 }} width={40} />
-              <Tooltip formatter={v => formatRupiah(v)} />
-              <Legend />
-              <Line type="monotone" dataKey="income"  stroke="#22c55e" strokeWidth={2} dot={period === 'week'} activeDot={{ r: 4 }} name="Pemasukan" />
-              <Line type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={2} dot={period === 'week'} activeDot={{ r: 4 }} name="Pengeluaran" />
+              <Tooltip formatter={v => [formatRupiah(v), 'Saldo']} />
+              <Line
+                type="monotone" dataKey="saldo" stroke="#22c55e" strokeWidth={2.5}
+                dot={false} activeDot={{ r: 5, fill: '#22c55e' }}
+              />
             </LineChart>
           </ResponsiveContainer>
         )}
