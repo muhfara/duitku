@@ -8,16 +8,24 @@ import { Modal, RupiahInput, Spinner, inputCls, selectCls } from '../components/
 
 const PAYMENT_METHODS = ['cash', 'transfer', 'ewallet'];
 
+const WALLET_TYPE_TO_PAYMENT = { cash: 'cash', bank: 'transfer', ewallet: 'ewallet', other: 'cash' };
+
+function getPaymentMethodFromWallet(walletId, wallets) {
+  const wallet = wallets.find(w => w.id === walletId);
+  return WALLET_TYPE_TO_PAYMENT[wallet?.type] ?? 'cash';
+}
+
 function TransactionForm({ categories, wallets, userId, onSave, onClose, initial, t }) {
   const defaultWallet = wallets.find(w => w.is_default)?.id ?? wallets[0]?.id ?? '';
   const isEdit = !!initial;
+  const initialWalletId = initial?.wallet_id ?? defaultWallet;
   const [form, setForm] = useState({
     type: initial?.type ?? 'expense',
     category_id: initial?.category_id ?? '',
     amount: initial?.amount ? String(Math.round(Number(initial.amount))) : '',
     trx_date: initial?.trx_date ?? new Date().toISOString().split('T')[0],
-    wallet_id: initial?.wallet_id ?? defaultWallet,
-    payment_method: initial?.payment_method ?? 'cash',
+    wallet_id: initialWalletId,
+    payment_method: initial?.payment_method ?? getPaymentMethodFromWallet(initialWalletId, wallets),
     note: initial?.note ?? '',
   });
   const [loading, setLoading] = useState(false);
@@ -75,7 +83,10 @@ function TransactionForm({ categories, wallets, userId, onSave, onClose, initial
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('wallet')}</label>
-          <select value={form.wallet_id} onChange={e => setForm(f => ({ ...f, wallet_id: e.target.value }))} className={selectCls()}>
+          <select value={form.wallet_id} onChange={e => {
+              const wid = e.target.value;
+              setForm(f => ({ ...f, wallet_id: wid, payment_method: getPaymentMethodFromWallet(wid, wallets) }));
+            }} className={selectCls()}>
             <option value="">{t('noWallet')}</option>
             {wallets.map(w => <option key={w.id} value={w.id}>{w.icon} {w.name}</option>)}
           </select>
