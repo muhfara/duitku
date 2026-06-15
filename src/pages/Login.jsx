@@ -13,13 +13,14 @@ export default function Login() {
   const [name, setName] = useState('');
   const [otp, setOtp] = useState('');
   const [showPass, setShowPass] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault(); setError(''); setLoading(true);
     try {
-      const res = await login(email, password);
+      const res = await login(email, password, rememberMe);
       setLoading(false);
       if (res.error) { setError(res.error); return; }
       navigate('/', { replace: true });
@@ -76,7 +77,13 @@ export default function Login() {
               <form onSubmit={handleLogin} className="space-y-4">
                 <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="email@example.com" cls={ic} />
                 <PasswordField label="Password" value={password} onChange={setPassword} show={showPass} toggle={() => setShowPass(v => !v)} cls={ic} />
-                <button type="button" onClick={() => { setMode('forgot'); setError(''); }} className="text-xs text-green-600 hover:underline">{t('forgotPassword')}</button>
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="w-4 h-4 rounded accent-green-500" />
+                    <span className="text-sm text-gray-600 dark:text-gray-400">{t('rememberMe')}</span>
+                  </label>
+                  <button type="button" onClick={() => { setMode('forgot'); setError(''); }} className="text-xs text-green-600 hover:underline">{t('forgotPassword')}</button>
+                </div>
                 <SubmitBtn loading={loading} label={t('loginBtn')} />
               </form>
               <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-4">

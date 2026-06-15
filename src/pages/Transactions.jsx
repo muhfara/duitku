@@ -128,6 +128,7 @@ export default function Transactions() {
   const [editTrx, setEditTrx] = useState(null);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('');
 
   const today = new Date().toISOString().split('T')[0];
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
@@ -141,6 +142,11 @@ export default function Transactions() {
     return d.toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-US', opts);
   };
 
+  const filteredCategoryOptions = useMemo(
+    () => categories.filter(c => filterType === 'all' || c.type === filterType),
+    [categories, filterType],
+  );
+
   const filtered = useMemo(() => {
     return transactions.filter(tx => {
       const cat = categories.find(c => c.id === tx.category_id);
@@ -148,9 +154,10 @@ export default function Transactions() {
         (tx.note ?? '').toLowerCase().includes(search.toLowerCase()) ||
         (cat?.name ?? '').toLowerCase().includes(search.toLowerCase());
       const matchType = filterType === 'all' || tx.type === filterType;
-      return matchSearch && matchType;
+      const matchCategory = !filterCategory || tx.category_id === filterCategory;
+      return matchSearch && matchType && matchCategory;
     });
-  }, [transactions, categories, search, filterType]);
+  }, [transactions, categories, search, filterType, filterCategory]);
 
   const grouped = useMemo(() => {
     const sorted = [...filtered].sort((a, b) => {
@@ -202,16 +209,23 @@ export default function Transactions() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('searchTrx')}
             className="w-full pl-8 pr-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
         </div>
-        <select value={filterType} onChange={e => setFilterType(e.target.value)}
-          className="border border-gray-200 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2.5 text-sm focus:outline-none">
-          <option value="all">{t('all')}</option>
-          <option value="income">{t('income')}</option>
-          <option value="expense">{t('expense')}</option>
-        </select>
         <button onClick={() => !noWallets && setShowModal(true)} disabled={noWallets}
           className="flex items-center gap-1.5 bg-green-500 hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-2.5 rounded-lg text-sm font-medium flex-shrink-0">
           <Plus size={16} /><span className="hidden sm:inline">{t('recordTrx')}</span>
         </button>
+      </div>
+      <div className="flex gap-2">
+        <select value={filterType} onChange={e => { setFilterType(e.target.value); setFilterCategory(''); }}
+          className="flex-1 border border-gray-200 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2.5 text-sm focus:outline-none">
+          <option value="all">{t('all')}</option>
+          <option value="income">{t('income')}</option>
+          <option value="expense">{t('expense')}</option>
+        </select>
+        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
+          className="flex-1 border border-gray-200 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2.5 text-sm focus:outline-none">
+          <option value="">{t('allCategories')}</option>
+          {filteredCategoryOptions.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+        </select>
       </div>
 
       {grouped.length === 0

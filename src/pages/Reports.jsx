@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { useApp } from '../context/AppContext';
@@ -269,15 +269,15 @@ export default function Reports() {
           </ResponsiveContainer>
         ) : (
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chartData} barSize={period === 'month' ? 5 : 16} barGap={1}>
+            <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="label" tick={{ fontSize: period === 'month' ? 9 : 11 }} interval={period === 'month' ? 4 : 0} />
               <YAxis tickFormatter={fmtY} tick={{ fontSize: 10 }} width={40} />
               <Tooltip formatter={v => formatRupiah(v)} />
               <Legend />
-              <Bar dataKey="income"  fill="#22c55e" name="Pemasukan"   radius={[3, 3, 0, 0]} />
-              <Bar dataKey="expense" fill="#ef4444" name="Pengeluaran" radius={[3, 3, 0, 0]} />
-            </BarChart>
+              <Line type="monotone" dataKey="income"  stroke="#22c55e" strokeWidth={2} dot={period === 'week'} activeDot={{ r: 4 }} name="Pemasukan" />
+              <Line type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={2} dot={period === 'week'} activeDot={{ r: 4 }} name="Pengeluaran" />
+            </LineChart>
           </ResponsiveContainer>
         )}
       </div>

@@ -35,6 +35,16 @@ export function AppProvider({ children }) {
   // Auth hydration
   useEffect(() => {
     let cancelled = false;
+    const persistLogin = localStorage.getItem('persist_login') === '1';
+    const sessionOnly = sessionStorage.getItem('session_only') === '1';
+
+    if (!persistLogin && !sessionOnly) {
+      insforge.auth.signOut().finally(() => {
+        if (!cancelled) setAuthLoading(false);
+      });
+      return () => { cancelled = true; };
+    }
+
     insforge.auth.getCurrentUser().then(({ data, error }) => {
       if (cancelled) return;
       if (!error && data?.user) setUser(data.user);
@@ -43,10 +53,17 @@ export function AppProvider({ children }) {
     return () => { cancelled = true; };
   }, []);
 
-  const login = useCallback(async (email, password) => {
+  const login = useCallback(async (email, password, rememberMe = true) => {
     const { data, error } = await insforge.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
     setUser(data.user);
+    if (rememberMe) {
+      localStorage.setItem('persist_login', '1');
+      sessionStorage.removeItem('session_only');
+    } else {
+      localStorage.removeItem('persist_login');
+      sessionStorage.setItem('session_only', '1');
+    }
     return { ok: true };
   }, []);
 
@@ -70,6 +87,8 @@ export function AppProvider({ children }) {
     await insforge.auth.signOut();
     setUser(null);
     setProfile(null);
+    localStorage.removeItem('persist_login');
+    sessionStorage.removeItem('session_only');
   }, []);
 
   const sendResetEmail = useCallback(async (email) => {
