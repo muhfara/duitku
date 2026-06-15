@@ -372,6 +372,9 @@ function DebtCard({ debt, payments, wallets, onRefetch, t }) {
           <p className="text-xs text-gray-400 flex items-center gap-1"><Clock size={10} />{debt.due_date ? formatDate(debt.due_date) : '—'}</p>
           <p className="text-xs text-gray-400">{Math.round(progress)}% terbayar</p>
         </div>
+        {debt.created_at && (
+          <p className="text-xs text-gray-400 mt-0.5 italic">{t('createdAt')}: {formatDate(debt.created_at)}</p>
+        )}
       </div>
       <div className="flex border-t border-gray-50 dark:border-gray-700">
         <button onClick={() => setExpanded(v => !v)} className="flex-1 py-2.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-center gap-1">

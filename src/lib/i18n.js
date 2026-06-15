@@ -24,7 +24,7 @@ export const translations = {
     chooseCategory: 'Pilih kategori', noWallet: 'Tanpa dompet',
     noTrxData: 'Tidak ada transaksi',
     noWalletWarning: 'Buat dompet terlebih dahulu sebelum mencatat transaksi.',
-    searchTrx: 'Cari transaksi...', autoFilled: 'otomatis',
+    searchTrx: 'Cari transaksi...', autoFilled: 'otomatis', today: 'Hari ini', yesterday: 'Kemarin', createdAt: 'Dibuat',
     // Categories
     manageCategories: 'Kategori', addCategory: 'Tambah Kategori', editCategory: 'Edit Kategori',
     categoryName: 'Nama Kategori', categoryIcon: 'Ikon (emoji)', categoryColor: 'Warna',
@@ -124,7 +124,7 @@ export const translations = {
     chooseCategory: 'Choose category', noWallet: 'No wallet',
     noTrxData: 'No transactions',
     noWalletWarning: 'Please create a wallet before recording transactions.',
-    searchTrx: 'Search transactions...', autoFilled: 'auto',
+    searchTrx: 'Search transactions...', autoFilled: 'auto', today: 'Today', yesterday: 'Yesterday', createdAt: 'Created',
     // Categories
     manageCategories: 'Categories', addCategory: 'Add Category', editCategory: 'Edit Category',
     categoryName: 'Category Name', categoryIcon: 'Icon (emoji)', categoryColor: 'Color',

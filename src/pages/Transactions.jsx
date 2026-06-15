@@ -120,7 +120,7 @@ function TransactionForm({ categories, wallets, userId, onSave, onClose, initial
 }
 
 export default function Transactions() {
-  const { user, t } = useApp();
+  const { user, t, lang } = useApp();
   const { data: transactions = [], loading, refetch } = useQuery(fetchTransactions, [user?.id]);
   const { data: categories = [] } = useQuery(fetchCategories, [user?.id]);
   const { data: wallets = [], loading: wLoading } = useQuery(fetchWallets, [user?.id]);
@@ -128,6 +128,18 @@ export default function Transactions() {
   const [editTrx, setEditTrx] = useState(null);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('all');
+
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+  const getDateLabel = (dateStr) => {
+    if (dateStr === today) return t('today');
+    if (dateStr === yesterday) return t('yesterday');
+    const d = new Date(dateStr + 'T12:00:00');
+    const opts = { weekday: 'long', day: 'numeric', month: 'long' };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+    return d.toLocaleDateString(lang === 'id' ? 'id-ID' : 'en-US', opts);
+  };
 
   const filtered = useMemo(() => {
     return transactions.filter(tx => {
@@ -139,6 +151,19 @@ export default function Transactions() {
       return matchSearch && matchType;
     });
   }, [transactions, categories, search, filterType]);
+
+  const grouped = useMemo(() => {
+    const sorted = [...filtered].sort((a, b) => {
+      if (a.trx_date !== b.trx_date) return b.trx_date.localeCompare(a.trx_date);
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
+    const map = new Map();
+    for (const tx of sorted) {
+      if (!map.has(tx.trx_date)) map.set(tx.trx_date, []);
+      map.get(tx.trx_date).push(tx);
+    }
+    return [...map.entries()].map(([date, items]) => ({ date, items }));
+  }, [filtered]);
 
   const totalIncome = filtered.filter(tx => tx.type === 'income').reduce((s, tx) => s + Number(tx.amount), 0);
   const totalExpense = filtered.filter(tx => tx.type === 'expense').reduce((s, tx) => s + Number(tx.amount), 0);
@@ -189,43 +214,58 @@ export default function Transactions() {
         </button>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-        {filtered.length === 0
-          ? <div className="py-12 text-center text-gray-400 text-sm">{t('noTrxData')}</div>
-          : (
-            <div className="divide-y divide-gray-50 dark:divide-gray-700">
-              {filtered.map(tx => {
-                const cat = categories.find(c => c.id === tx.category_id);
-                const wallet = wallets.find(w => w.id === tx.wallet_id);
-                const pmLabel = { cash: t('cash'), transfer: t('transfer'), ewallet: t('ewallet') }[tx.payment_method] ?? tx.payment_method;
-                return (
-                  <div key={tx.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 group">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                      style={{ backgroundColor: (cat?.color ?? '#64748b') + '20' }}>{cat?.icon ?? '📦'}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{tx.note || cat?.name}</p>
-                      <p className="text-xs text-gray-400">
-                        {formatDate(tx.trx_date)} · {pmLabel}
-                        {wallet ? ` · ${wallet.icon} ${wallet.name}` : ''}
-                      </p>
-                    </div>
-                    <p className={`text-sm font-semibold flex-shrink-0 ${tx.type === 'income' ? 'text-green-600' : 'text-red-500'}`}>
-                      {tx.type === 'income' ? '+' : '-'}{formatRupiah(Number(tx.amount))}
-                    </p>
-                    <div className="ml-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      <button onClick={() => setEditTrx(tx)} className="p-1.5 rounded-lg text-gray-300 hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => { deleteTransaction(tx.id); refetch(); }} className="p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+      {grouped.length === 0
+        ? <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 py-12 text-center text-gray-400 text-sm">{t('noTrxData')}</div>
+        : (
+          <div className="space-y-3">
+            {grouped.map(({ date, items }) => {
+              const dayIncome = items.filter(tx => tx.type === 'income').reduce((s, tx) => s + Number(tx.amount), 0);
+              const dayExpense = items.filter(tx => tx.type === 'expense').reduce((s, tx) => s + Number(tx.amount), 0);
+              return (
+                <div key={date} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                  <div className="px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-300 capitalize">{getDateLabel(date)}</span>
+                    <span className="text-xs flex items-center gap-2">
+                      {dayExpense > 0 && <span className="text-red-400">-{formatRupiah(dayExpense)}</span>}
+                      {dayIncome > 0 && <span className="text-green-500">+{formatRupiah(dayIncome)}</span>}
+                    </span>
                   </div>
-                );
-              })}
-            </div>
-          )}
-      </div>
+                  <div className="divide-y divide-gray-50 dark:divide-gray-700">
+                    {items.map(tx => {
+                      const cat = categories.find(c => c.id === tx.category_id);
+                      const wallet = wallets.find(w => w.id === tx.wallet_id);
+                      const pmLabel = { cash: t('cash'), transfer: t('transfer'), ewallet: t('ewallet') }[tx.payment_method] ?? tx.payment_method;
+                      return (
+                        <div key={tx.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 group">
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
+                            style={{ backgroundColor: (cat?.color ?? '#64748b') + '20' }}>{cat?.icon ?? '📦'}</div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{tx.note || cat?.name}</p>
+                            <p className="text-xs text-gray-400">
+                              {pmLabel}{wallet ? ` · ${wallet.icon} ${wallet.name}` : ''}
+                            </p>
+                          </div>
+                          <p className={`text-sm font-semibold flex-shrink-0 ${tx.type === 'income' ? 'text-green-600' : 'text-red-500'}`}>
+                            {tx.type === 'income' ? '+' : '-'}{formatRupiah(Number(tx.amount))}
+                          </p>
+                          <div className="ml-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                            <button onClick={() => setEditTrx(tx)} className="p-1.5 rounded-lg text-gray-300 hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30">
+                              <Pencil size={14} />
+                            </button>
+                            <button onClick={() => { deleteTransaction(tx.id); refetch(); }} className="p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      }
 
       {(showModal || editTrx) && (
         <Modal onClose={closeModal}>
