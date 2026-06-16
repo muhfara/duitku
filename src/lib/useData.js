@@ -184,16 +184,15 @@ export async function fetchSavingsMembers() {
 
   const ids = [...new Set(members.map(m => m.user_id))];
   const { data: profiles } = await insforge.database
-    .from('profiles').select('id, full_name, email').in('id', ids);
+    .rpc('get_profiles_by_ids', { p_ids: ids });
   const profileMap = Object.fromEntries((profiles ?? []).map(p => [p.id, p]));
   return members.map(m => ({ ...m, profile: profileMap[m.user_id] ?? null }));
 }
 
 export async function findProfileByEmail(email) {
   const { data } = await insforge.database
-    .from('profiles').select('id, full_name, email')
-    .eq('email', email.trim().toLowerCase()).single();
-  return data ?? null;
+    .rpc('find_profile_by_email', { p_email: email.trim().toLowerCase() });
+  return (data && data.length > 0) ? data[0] : null;
 }
 
 export async function addSavingsMember(savingsId, userId) {
