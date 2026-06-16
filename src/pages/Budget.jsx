@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, X, AlertTriangle, CheckCircle, Trash2 } from 'lucide-react';
+import { Plus, X, AlertTriangle, CheckCircle, Trash2, Pencil } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useQuery, fetchBudgets, fetchCategories, fetchTransactions, upsertBudget, deleteBudget } from '../lib/useData';
 import { formatRupiah } from '../data/dummyData';
@@ -133,15 +133,28 @@ export default function Budget() {
           : budgetStats.map(b => (
             <div key={b.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 hover:border-green-200 dark:hover:border-green-700 transition-colors">
               <div className="flex items-center justify-between mb-2">
-                <button className="flex items-center gap-2 flex-1" onClick={() => { setEditBudget(b); setShowModal(true); }}>
-                  <span className="text-xl">{b.cat?.icon}</span>
-                  <span className="font-medium text-gray-800 dark:text-gray-100 text-sm">{b.cat?.name}</span>
-                </button>
-                <div className="flex items-center gap-2">
-                  {b.pct >= 100 ? <AlertTriangle size={14} className="text-red-500" /> : b.pct >= 80 ? <AlertTriangle size={14} className="text-orange-400" /> : <CheckCircle size={14} className="text-green-500" />}
-                  <span className={`text-sm font-bold ${b.pct >= 100 ? 'text-red-500' : b.pct >= 80 ? 'text-orange-500' : 'text-green-600'}`}>{Math.round(b.pct)}%</span>
-                  <button onClick={(e) => handleDelete(b.id, e)} className="p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-gray-300 hover:text-red-500 transition-colors">
-                    <Trash2 size={14} />
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="text-xl flex-shrink-0">{b.cat?.icon}</span>
+                  <span className="font-medium text-gray-800 dark:text-gray-100 text-sm truncate">{b.cat?.name}</span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                  {b.pct >= 100
+                    ? <AlertTriangle size={14} className="text-red-500" />
+                    : b.pct >= 80
+                      ? <AlertTriangle size={14} className="text-orange-400" />
+                      : <CheckCircle size={14} className="text-green-500" />}
+                  <span className={`text-sm font-bold ${b.pct >= 100 ? 'text-red-500' : b.pct >= 80 ? 'text-orange-500' : 'text-green-600'}`}>
+                    {Math.round(b.pct)}%
+                  </span>
+                  <button
+                    onClick={() => { setEditBudget(b); setShowModal(true); }}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    onClick={(e) => handleDelete(b.id, e)}
+                    className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-gray-300 hover:text-red-500 transition-colors">
+                    <Trash2 size={13} />
                   </button>
                 </div>
               </div>

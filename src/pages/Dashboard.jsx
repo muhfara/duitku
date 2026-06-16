@@ -47,7 +47,7 @@ function buildMonthlyTrend(transactions) {
 }
 
 export default function Dashboard() {
-  const { user, t } = useApp();
+  const { user, t, lang } = useApp();
   const { data: transactions = [], loading: tLoading } = useQuery(fetchTransactions, [user?.id]);
   const { data: categories = [] } = useQuery(fetchCategories, [user?.id]);
   const { data: debts = [] } = useQuery(fetchDebts, [user?.id]);
@@ -97,15 +97,63 @@ export default function Dashboard() {
 
   if (tLoading) return <Spinner />;
 
-  const cardBase = 'rounded-2xl p-4 flex items-start gap-3';
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (lang === 'en') {
+      if (h < 12) return 'Good morning';
+      if (h < 17) return 'Good afternoon';
+      return 'Good evening';
+    }
+    if (h < 11) return 'Selamat pagi';
+    if (h < 15) return 'Selamat siang';
+    if (h < 18) return 'Selamat sore';
+    return 'Selamat malam';
+  })();
+  const name = user?.profile?.name ?? user?.email?.split('@')[0] ?? 'Pengguna';
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="space-y-4">
+      {/* Mobile hero balance card */}
+      <div className="lg:hidden rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 p-5 text-white shadow-sm">
+        <p className="text-sm text-green-100 mb-0.5">{greeting}, {name} 👋</p>
+        <p className="text-xs text-green-200 mb-3">{t('totalBalance')}</p>
+        <p className="text-3xl font-bold tracking-tight mb-4">{formatRupiah(totalBalance)}</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white/15 rounded-xl p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <TrendingUp size={13} className="text-green-100" />
+              <span className="text-xs text-green-100">{t('monthlyIncome')}</span>
+            </div>
+            <p className="text-base font-semibold">{formatRupiah(thisMonth.income)}</p>
+          </div>
+          <div className="bg-white/15 rounded-xl p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <TrendingDown size={13} className="text-green-100" />
+              <span className="text-xs text-green-100">{t('monthlyExpense')}</span>
+            </div>
+            <p className="text-base font-semibold">{formatRupiah(thisMonth.expense)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop stat cards (hidden on mobile — info is in hero card above) */}
+      <div className="hidden lg:grid lg:grid-cols-4 gap-3">
         <StatCard label={t('totalBalance')} value={formatRupiah(totalBalance)} sub={`${wallets.length} ${t('wallets').toLowerCase()}`} icon={Wallet} color="bg-green-500" bg="bg-green-50 dark:bg-green-900/20" />
         <StatCard label={t('totalSavings')} value={formatRupiah(totalSavings)} sub="dana terkumpul" icon={PiggyBank} color="bg-blue-500" bg="bg-blue-50 dark:bg-blue-900/20" />
         <StatCard label={t('monthlyIncome')} value={formatRupiah(thisMonth.income)} sub={CURRENT_PERIOD} icon={TrendingUp} color="bg-cyan-500" bg="bg-cyan-50 dark:bg-cyan-900/20" />
         <StatCard label={t('monthlyExpense')} value={formatRupiah(thisMonth.expense)} sub={CURRENT_PERIOD} icon={TrendingDown} color="bg-red-500" bg="bg-red-50 dark:bg-red-900/20" />
+      </div>
+
+      {/* Mobile-only: Savings + Debt summary row */}
+      <div className="lg:hidden grid grid-cols-2 gap-3">
+        <StatCard label={t('totalSavings')} value={formatRupiah(totalSavings)} sub="dana terkumpul" icon={PiggyBank} color="bg-blue-500" bg="bg-blue-50 dark:bg-blue-900/20" />
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 flex items-start gap-3 border border-gray-100 dark:border-gray-700">
+          <div className="min-w-0 w-full">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('debts')}</p>
+            <p className="text-sm font-bold text-red-500 truncate">{formatRupiah(totalDebt)}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{t('totalReceivable')}: <span className="text-green-600 font-medium">{formatRupiah(totalReceivable)}</span></p>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
