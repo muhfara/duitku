@@ -5,6 +5,40 @@ import { deleteUserData } from '../lib/useData';
 
 const AppContext = createContext(null);
 
+// ---- Persistent session helpers ----
+// Insforge SDK hanya menyimpan token di memory → hilang saat refresh.
+// Solusi: simpan token ke localStorage saat rememberMe=true, restore saat page load.
+const PK = {
+  flag: 'persist_login',
+  at:   'persist_at',     // timestamp kunjungan terakhir (untuk 2-hari expiry)
+  tok:  'persist_tok',    // access token
+  rt:   'persist_rt',     // refresh token
+  user: 'persist_user',   // user object (JSON)
+};
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+
+function clearPersist() {
+  Object.values(PK).forEach(k => localStorage.removeItem(k));
+}
+
+function savePersist(data) {
+  localStorage.setItem(PK.flag, '1');
+  localStorage.setItem(PK.at,   String(Date.now()));
+  if (data.accessToken)  localStorage.setItem(PK.tok,  data.accessToken);
+  if (data.refreshToken) localStorage.setItem(PK.rt,   data.refreshToken);
+  if (data.user)         localStorage.setItem(PK.user, JSON.stringify(data.user));
+}
+
+function restoreSdkSession({ accessToken, refreshToken, user }) {
+  try {
+    // setAccessToken adalah public API InsForgeClient
+    if (accessToken)  insforge.setAccessToken(accessToken);
+    // tokenManager & getHttpClient() keduanya accessible
+    if (user)         insforge.auth.tokenManager.setUser(user);
+    if (refreshToken) insforge.getHttpClient().setRefreshToken(refreshToken);
+  } catch (_) { /* jika SDK berubah struktur internalnya */ }
+}
+
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -32,12 +66,13 @@ export function AppProvider({ children }) {
   const toggleLang = useCallback(() => setLang(v => v === 'id' ? 'en' : 'id'), []);
   const t = getT(lang);
 
-  // Auth hydration
+  // Auth hydration — dijalankan sekali saat app load / page refresh
   useEffect(() => {
     let cancelled = false;
-    const persistLogin = localStorage.getItem('persist_login') === '1';
-    const sessionOnly = sessionStorage.getItem('session_only') === '1';
+    const persistLogin = localStorage.getItem(PK.flag) === '1';
+    const sessionOnly  = sessionStorage.getItem('session_only') === '1';
 
+    // Tidak ada sesi sama sekali → signOut untuk bersih-bersih lalu redirect ke login
     if (!persistLogin && !sessionOnly) {
       insforge.auth.signOut().finally(() => {
         if (!cancelled) setAuthLoading(false);
@@ -45,6 +80,39 @@ export function AppProvider({ children }) {
       return () => { cancelled = true; };
     }
 
+    if (persistLogin) {
+      // Cek apakah sudah 2 hari tanpa kunjungan
+      const lastAt = Number(localStorage.getItem(PK.at) ?? '0');
+      if (Date.now() - lastAt > TWO_DAYS_MS) {
+        clearPersist();
+        insforge.auth.signOut().finally(() => {
+          if (!cancelled) setAuthLoading(false);
+        });
+        return () => { cancelled = true; };
+      }
+
+      // Restore session: token + user dikembalikan ke SDK memory
+      const storedUser = JSON.parse(localStorage.getItem(PK.user) ?? 'null');
+      restoreSdkSession({
+        accessToken:  localStorage.getItem(PK.tok) ?? '',
+        refreshToken: localStorage.getItem(PK.rt)  ?? '',
+        user:         storedUser,
+      });
+
+      if (storedUser && !cancelled) {
+        setUser(storedUser);
+        // Perbarui timestamp kunjungan terakhir
+        localStorage.setItem(PK.at, String(Date.now()));
+        setAuthLoading(false);
+        // Token sudah ada di memory SDK; jika expired, refresh otomatis
+        // terjadi saat API call pertama (handleRequest → refreshAndSaveSession)
+      } else {
+        setAuthLoading(false);
+      }
+      return () => { cancelled = true; };
+    }
+
+    // sessionOnly: tidak ada stored token, andalkan HTTP-only cookie refresh
     insforge.auth.getCurrentUser().then(({ data, error }) => {
       if (cancelled) return;
       if (!error && data?.user) setUser(data.user);
@@ -58,10 +126,10 @@ export function AppProvider({ children }) {
     if (error) return { error: error.message };
     setUser(data.user);
     if (rememberMe) {
-      localStorage.setItem('persist_login', '1');
+      savePersist(data);   // simpan token + user ke localStorage
       sessionStorage.removeItem('session_only');
     } else {
-      localStorage.removeItem('persist_login');
+      clearPersist();      // pastikan tidak ada sisa persist dari session sebelumnya
       sessionStorage.setItem('session_only', '1');
     }
     return { ok: true };
@@ -87,7 +155,7 @@ export function AppProvider({ children }) {
     await insforge.auth.signOut();
     setUser(null);
     setProfile(null);
-    localStorage.removeItem('persist_login');
+    clearPersist();
     sessionStorage.removeItem('session_only');
   }, []);
 
@@ -115,6 +183,8 @@ export function AppProvider({ children }) {
       await insforge.auth.signOut();
       setUser(null);
       setProfile(null);
+      clearPersist();
+      sessionStorage.removeItem('session_only');
       return { ok: true };
     } catch (e) {
       return { error: e.message };
