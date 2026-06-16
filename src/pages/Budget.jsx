@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, X, AlertTriangle, CheckCircle, Trash2, Pencil } from 'lucide-react';
+import { Plus, X, AlertTriangle, CheckCircle, Trash2, Pencil, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useQuery, fetchBudgets, fetchCategories, fetchTransactions, upsertBudget, deleteBudget } from '../lib/useData';
 import { formatRupiah } from '../data/dummyData';
@@ -8,15 +8,24 @@ import { Modal, RupiahInput, Spinner, selectCls } from '../components/shared';
 const CURRENT_PERIOD = new Date().toISOString().slice(0, 7);
 const PERIOD_LABEL = new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
 
+function periodLabel(period) {
+  if (period === 'monthly') return null;
+  try {
+    return new Date(period + '-01').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  } catch { return period; }
+}
+
 function BudgetForm({ existing, userId, categories, onSave, onClose, t }) {
   const expCats = categories.filter(c => c.type === 'expense');
   const [form, setForm] = useState({
     category_id: existing?.category_id ?? '',
     limit_amount: existing?.limit_amount ? String(Math.round(Number(existing.limit_amount))) : '',
-    period: CURRENT_PERIOD,
+    period: existing?.period ?? 'monthly',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const isMonthly = form.period === 'monthly';
 
   const handleSubmit = async (e) => {
     e.preventDefault(); setLoading(true);
@@ -34,6 +43,8 @@ function BudgetForm({ existing, userId, categories, onSave, onClose, t }) {
       </div>
       <form onSubmit={handleSubmit} className="p-5 space-y-4">
         {error && <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/30 px-3 py-2 rounded-lg">{error}</p>}
+
+        {/* Kategori */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('category')}</label>
           <select value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))}
@@ -42,12 +53,50 @@ function BudgetForm({ existing, userId, categories, onSave, onClose, t }) {
             {expCats.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
           </select>
         </div>
+
+        {/* Periode */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('budgetLimit')} — {PERIOD_LABEL}</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Periode Anggaran</label>
+          <div className="flex rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden mb-2" style={{ opacity: existing ? 0.6 : 1 }}>
+            <button type="button"
+              disabled={!!existing}
+              onClick={() => setForm(f => ({ ...f, period: 'monthly' }))}
+              className={`flex-1 py-2 px-3 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors
+                ${isMonthly ? 'bg-green-500 text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+              <RefreshCw size={12} />
+              {t('budgetRecurring')}
+            </button>
+            <button type="button"
+              disabled={!!existing}
+              onClick={() => setForm(f => ({ ...f, period: f.period === 'monthly' ? CURRENT_PERIOD : f.period }))}
+              className={`flex-1 py-2 px-3 text-xs font-medium transition-colors
+                ${!isMonthly ? 'bg-green-500 text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+              {t('budgetSpecific')}
+            </button>
+          </div>
+          {isMonthly
+            ? <p className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-3 py-1.5 rounded-lg">
+                🔄 {t('budgetRecurringHint')}
+              </p>
+            : <input type="month" value={form.period}
+                disabled={!!existing}
+                min="2020-01" max="2035-12"
+                onChange={e => setForm(f => ({ ...f, period: e.target.value }))}
+                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+          }
+        </div>
+
+        {/* Batas anggaran */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+            {t('budgetLimit')}
+            {isMonthly ? ` — ${PERIOD_LABEL}` : form.period !== 'monthly' ? ` — ${periodLabel(form.period) ?? form.period}` : ''}
+          </label>
           <RupiahInput rawValue={form.limit_amount} onRawChange={v => setForm(f => ({ ...f, limit_amount: v }))}
             className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
             required />
         </div>
+
         <div className="flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 py-2.5 rounded-lg text-sm font-medium">{t('cancel')}</button>
           <button type="submit" disabled={loading} className="flex-1 bg-green-500 hover:bg-green-600 disabled:opacity-60 text-white py-2.5 rounded-lg text-sm font-medium">
@@ -69,11 +118,13 @@ export default function Budget() {
 
   const budgetStats = useMemo(() => {
     return budgets
-      .filter(b => b.period === CURRENT_PERIOD)
+      // Show budgets for current month OR recurring monthly budgets
+      .filter(b => b.period === CURRENT_PERIOD || b.period === 'monthly')
       .map(b => {
         const cat = categories.find(c => c.id === b.category_id);
+        // Always calculate spending from the CURRENT month's transactions
         const spent = transactions
-          .filter(tx => tx.category_id === b.category_id && tx.type === 'expense' && tx.trx_date.startsWith(b.period))
+          .filter(tx => tx.category_id === b.category_id && tx.type === 'expense' && tx.trx_date.startsWith(CURRENT_PERIOD))
           .reduce((s, tx) => s + Number(tx.amount), 0);
         const pct = (spent / Number(b.limit_amount)) * 100;
         return { ...b, cat, spent, pct, remaining: Number(b.limit_amount) - spent };
@@ -135,7 +186,15 @@ export default function Budget() {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   <span className="text-xl flex-shrink-0">{b.cat?.icon}</span>
-                  <span className="font-medium text-gray-800 dark:text-gray-100 text-sm truncate">{b.cat?.name}</span>
+                  <div className="min-w-0">
+                    <span className="font-medium text-gray-800 dark:text-gray-100 text-sm truncate block">{b.cat?.name}</span>
+                    {b.period === 'monthly'
+                      ? <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600 dark:text-green-400">
+                          <RefreshCw size={9} /> {t('budgetRecurring')}
+                        </span>
+                      : <span className="text-[10px] text-gray-400">{periodLabel(b.period)}</span>
+                    }
+                  </div>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
                   {b.pct >= 100

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus, X, Clock, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { useQuery, fetchDebts, fetchDebtPayments, fetchWallets, createDebt, updateDebt, deleteDebt, createDebtPayment, createTransaction, adjustWalletBalance } from '../lib/useData';
+import { useQuery, fetchDebts, fetchDebtPayments, fetchWallets, createDebt, updateDebt, deleteDebt, createDebtPayment, updateDebtPayment, deleteDebtPayment, recalcDebtRemaining, createTransaction, adjustWalletBalance } from '../lib/useData';
 import { formatRupiah, formatDate } from '../data/dummyData';
 import { Modal, RupiahInput, Spinner, inputCls, selectCls } from '../components/shared';
 
@@ -332,10 +332,68 @@ function PaymentForm({ debt, wallets, onSave, onClose, t }) {
   );
 }
 
+function PaymentEditForm({ payment, debt, onSave, onClose, t }) {
+  const [amount, setAmount] = useState(String(Math.round(Number(payment.amount))));
+  const [date, setDate] = useState(payment.pay_date ?? new Date().toISOString().split('T')[0]);
+  const [note, setNote] = useState(payment.note ?? '');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const val = parseFloat(amount);
+    if (!val || val <= 0) { setError('Jumlah tidak valid'); return; }
+    setLoading(true);
+    try {
+      await updateDebtPayment(payment.id, { amount: val, pay_date: date, note: note || null });
+      await recalcDebtRemaining(debt.id, debt.amount);
+      onSave(); onClose();
+    } catch (e) { setError(e.message); } finally { setLoading(false); }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+        <h2 className="font-semibold text-gray-800 dark:text-gray-100">{t('editPayment')}</h2>
+        <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
+      </div>
+      <div className="px-5 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-100 dark:border-gray-600">
+        <p className="text-xs text-gray-500 dark:text-gray-400">{debt.type === 'debt' ? 'Hutang ke' : 'Piutang dari'}</p>
+        <p className="font-semibold text-gray-800 dark:text-gray-100">{debt.counterparty}</p>
+      </div>
+      <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        {error && <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/30 px-3 py-2 rounded-lg">{error}</p>}
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-lg px-3 py-2">
+          <p className="text-xs text-amber-700 dark:text-amber-400">⚠️ {t('editPaymentNote')}</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('amount')} (Rp)</label>
+          <RupiahInput rawValue={amount} onRawChange={setAmount} className={inputCls()} required />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('date')}</label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputCls()} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('note')}</label>
+          <input value={note} onChange={e => setNote(e.target.value)} className={inputCls()} placeholder={t('optional')} />
+        </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={onClose} className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 py-2.5 rounded-lg text-sm font-medium">{t('cancel')}</button>
+          <button type="submit" disabled={loading} className="flex-1 bg-green-500 hover:bg-green-600 disabled:opacity-60 text-white py-2.5 rounded-lg text-sm font-medium">
+            {loading ? t('saving') : t('save')}
+          </button>
+        </div>
+      </form>
+    </>
+  );
+}
+
 function DebtCard({ debt, payments, wallets, onRefetch, t }) {
   const [expanded, setExpanded] = useState(false);
   const [showPay, setShowPay] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [editPayment, setEditPayment] = useState(null);
   const debtPayments = payments.filter(p => p.debt_id === debt.id);
   const progress = ((Number(debt.amount) - Number(debt.remaining)) / Number(debt.amount)) * 100;
   const isDebt = debt.type === 'debt';
@@ -343,6 +401,15 @@ function DebtCard({ debt, payments, wallets, onRefetch, t }) {
   const handleDelete = async () => {
     if (!confirm(t('deleteDebt'))) return;
     try { await deleteDebt(debt.id); onRefetch(); } catch (e) { alert(e.message); }
+  };
+
+  const handleDeletePayment = async (payment) => {
+    if (!confirm(t('deletePaymentConfirm'))) return;
+    try {
+      await deleteDebtPayment(payment.id);
+      await recalcDebtRemaining(debt.id, debt.amount);
+      onRefetch();
+    } catch (e) { alert(e.message); }
   };
 
   return (
@@ -395,18 +462,29 @@ function DebtCard({ debt, payments, wallets, onRefetch, t }) {
       {expanded && debtPayments.length > 0 && (
         <div className="border-t border-gray-50 dark:border-gray-700 divide-y divide-gray-50 dark:divide-gray-700">
           {debtPayments.map(p => (
-            <div key={p.id} className="flex items-center justify-between px-4 py-2">
-              <div>
-                <p className="text-xs text-gray-600 dark:text-gray-300">{p.note || 'Pembayaran'}</p>
+            <div key={p.id} className="flex items-center justify-between px-4 py-2.5 gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-600 dark:text-gray-300 truncate">{p.note || 'Pembayaran'}</p>
                 <p className="text-xs text-gray-400">{formatDate(p.pay_date)}</p>
               </div>
-              <p className="text-xs font-semibold text-green-600">{formatRupiah(Number(p.amount))}</p>
+              <p className="text-xs font-semibold text-green-600 flex-shrink-0">{formatRupiah(Number(p.amount))}</p>
+              <div className="flex gap-0.5 flex-shrink-0">
+                <button onClick={() => setEditPayment(p)}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-300 hover:text-gray-500 transition-colors">
+                  <Pencil size={11} />
+                </button>
+                <button onClick={() => handleDeletePayment(p)}
+                  className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-gray-300 hover:text-red-500 transition-colors">
+                  <Trash2 size={11} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
       )}
       {showPay && <Modal onClose={() => setShowPay(false)}><PaymentForm debt={debt} wallets={wallets} onSave={onRefetch} onClose={() => setShowPay(false)} t={t} /></Modal>}
       {showEdit && <Modal onClose={() => setShowEdit(false)}><DebtEditForm debt={debt} onSave={onRefetch} onClose={() => setShowEdit(false)} t={t} /></Modal>}
+      {editPayment && <Modal onClose={() => setEditPayment(null)}><PaymentEditForm payment={editPayment} debt={debt} onSave={onRefetch} onClose={() => setEditPayment(null)} t={t} /></Modal>}
     </div>
   );
 }

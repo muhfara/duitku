@@ -1,12 +1,14 @@
-import { useState } from 'react';
-import { Plus, X, ChevronDown, ChevronUp, PiggyBank, Pencil, Trash2 } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, X, ChevronDown, ChevronUp, PiggyBank, Pencil, Trash2, Users, UserPlus, UserMinus } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { useQuery, fetchSavings, fetchSavingsTransactions, fetchWallets, createSavings, updateSavings, deleteSavings, createSavingsTransaction, adjustWalletBalance, createTransaction } from '../lib/useData';
+import { useQuery, fetchSavings, fetchSavingsTransactions, fetchWallets, fetchSavingsMembers, createSavings, updateSavings, deleteSavings, createSavingsTransaction, adjustWalletBalance, createTransaction, findProfileByEmail, addSavingsMember, removeSavingsMember } from '../lib/useData';
 import { formatRupiah, formatDate } from '../data/dummyData';
 import { Modal, RupiahInput, Spinner, inputCls, selectCls } from '../components/shared';
 
 const ICONS = ['🎯','🏖️','🏠','🚗','💍','📱','✈️','🎓','💻','🛒','🏋️','🎮','👶','🏥','💰'];
 const COLORS = ['#22c55e','#3b82f6','#f97316','#a855f7','#ef4444','#06b6d4','#ec4899','#84cc16','#1e40af','#f59e0b'];
+
+const initials = (name) => (name ?? '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
 function SavingsForm({ onSave, onClose, userId, initial, t }) {
   const isEdit = !!initial;
@@ -34,6 +36,7 @@ function SavingsForm({ onSave, onClose, userId, initial, t }) {
             type: 'deposit',
             note: 'Saldo awal',
             trx_date: new Date().toISOString().split('T')[0],
+            user_id: userId,
           });
         }
       }
@@ -171,7 +174,7 @@ function DepositForm({ saving, wallets, onSave, onClose, t }) {
     if (type === 'withdraw' && val > maxWithdraw) { setError(`Maksimal tarik: ${formatRupiah(maxWithdraw)}`); return; }
     setLoading(true); setError('');
     try {
-      await createSavingsTransaction({ savings_id: saving.id, amount: val, type, note, trx_date: date });
+      await createSavingsTransaction({ savings_id: saving.id, amount: val, type, note, trx_date: date, user_id: user.id });
       if (walletId) {
         const delta = type === 'deposit' ? -(val + adminFeeVal) : +val;
         await adjustWalletBalance(walletId, delta);
@@ -265,13 +268,131 @@ function DepositForm({ saving, wallets, onSave, onClose, t }) {
   );
 }
 
-function SavingsCard({ saving, transactions, wallets, onRefetch, t }) {
+function ShareModal({ saving, currentUser, currentProfile, members, onRefetch, onClose, t }) {
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState('idle'); // idle | searching | error | success
+  const [message, setMessage] = useState('');
+
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    const trimmed = email.trim().toLowerCase();
+    if (trimmed === (currentUser.email ?? '').toLowerCase()) {
+      setStatus('error'); setMessage(t('cannotAddSelf')); return;
+    }
+    setStatus('searching');
+    try {
+      const found = await findProfileByEmail(trimmed);
+      if (!found) { setStatus('error'); setMessage(t('userNotFound')); return; }
+      if (members.some(m => m.user_id === found.id)) {
+        setStatus('error'); setMessage(t('alreadyMember')); return;
+      }
+      await addSavingsMember(saving.id, found.id);
+      setEmail(''); setStatus('success');
+      setMessage(`${found.full_name} ${t('memberAdded')}`);
+      onRefetch();
+    } catch (err) { setStatus('error'); setMessage(err.message); }
+  };
+
+  const handleRemove = async (memberUserId, memberName) => {
+    if (!confirm(`Hapus ${memberName} dari tabungan ini?`)) return;
+    try { await removeSavingsMember(saving.id, memberUserId); onRefetch(); }
+    catch (err) { alert(err.message); }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+        <div>
+          <h2 className="font-semibold text-gray-800 dark:text-gray-100">{t('shareSavings')}</h2>
+          <p className="text-xs text-gray-400">{saving.icon} {saving.name}</p>
+        </div>
+        <button onClick={onClose}><X size={20} className="text-gray-400" /></button>
+      </div>
+      <div className="p-5 space-y-5">
+        {/* Current members */}
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('currentMembers')}</p>
+          {/* Owner */}
+          <div className="flex items-center gap-3 py-2">
+            <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+              {initials(currentProfile?.full_name ?? currentUser.email)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{currentProfile?.full_name ?? t('you')}</p>
+              <p className="text-xs text-gray-400 truncate">{currentUser.email}</p>
+            </div>
+            <span className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full flex-shrink-0">{t('ownerLabel')}</span>
+          </div>
+          {/* Other members */}
+          {members.length === 0
+            ? <p className="text-xs text-gray-400 py-1">{t('noMembersYet')}</p>
+            : members.map(m => (
+              <div key={m.id} className="flex items-center gap-3 py-2 border-t border-gray-50 dark:border-gray-700">
+                <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                  {initials(m.profile?.full_name)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{m.profile?.full_name ?? t('unknownUser')}</p>
+                  <p className="text-xs text-gray-400 truncate">{m.profile?.email ?? ''}</p>
+                </div>
+                <button onClick={() => handleRemove(m.user_id, m.profile?.full_name ?? '?')}
+                  className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors flex-shrink-0">
+                  <UserMinus size={14} />
+                </button>
+              </div>
+            ))
+          }
+        </div>
+
+        {/* Add member */}
+        <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('addMember')}</p>
+          <form onSubmit={handleAdd} className="flex gap-2">
+            <input
+              type="email"
+              value={email}
+              onChange={e => { setEmail(e.target.value); setStatus('idle'); }}
+              className={`${inputCls()} flex-1`}
+              placeholder={t('memberEmail')}
+              required
+            />
+            <button type="submit" disabled={status === 'searching'}
+              className="bg-green-500 hover:bg-green-600 disabled:opacity-60 text-white px-3 py-2 rounded-lg flex-shrink-0 flex items-center justify-center">
+              <UserPlus size={16} />
+            </button>
+          </form>
+          {status === 'searching' && <p className="text-xs text-gray-400 mt-1.5">🔍 {t('searchingUser')}</p>}
+          {status === 'error' && <p className="text-xs text-red-500 mt-1.5">{message}</p>}
+          {status === 'success' && <p className="text-xs text-green-600 mt-1.5">✓ {message}</p>}
+        </div>
+
+        <p className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-lg">
+          💡 {t('shareHint')}
+        </p>
+      </div>
+    </>
+  );
+}
+
+function SavingsCard({ saving, transactions, wallets, members, currentUser, currentProfile, onRefetch, t }) {
+  const isOwner = saving.user_id === currentUser?.id;
+  const isShared = members.length > 0 || !isOwner;
   const [expanded, setExpanded] = useState(false);
   const [showDeposit, setShowDeposit] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+
   const pct = Math.min(100, (Number(saving.current_amount) / Number(saving.target_amount)) * 100);
   const history = transactions.filter(tx => tx.savings_id === saving.id);
+
+  const memberNameMap = useMemo(() => {
+    const map = {};
+    members.forEach(m => { if (m.profile) map[m.user_id] = m.profile.full_name; });
+    if (currentUser?.id) map[currentUser.id] = t('you');
+    return map;
+  }, [members, currentUser, t]);
+
   const statusMap = {
     active: { label: t('active'), cls: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600' },
     completed: { label: t('achieved'), cls: 'bg-green-100 dark:bg-green-900/30 text-green-600' },
@@ -283,17 +404,23 @@ function SavingsCard({ saving, transactions, wallets, onRefetch, t }) {
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
       <div className="p-4">
         <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0" style={{ backgroundColor: saving.color + '20' }}>
               {saving.icon}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <p className="font-semibold text-gray-800 dark:text-gray-100">{saving.name}</p>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>{badge.label}</span>
+                {isShared && (
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full font-medium">
+                    <Users size={10} />{members.length + 1}
+                  </span>
+                )}
               </div>
               {saving.deadline && <p className="text-xs text-gray-400">{t('deadline')}: {formatDate(saving.deadline)}</p>}
               {saving.note && <p className="text-xs text-gray-400 truncate">{saving.note}</p>}
+              {!isOwner && <p className="text-xs text-indigo-500 dark:text-indigo-400 mt-0.5">{t('sharedBadge')}</p>}
             </div>
           </div>
           <div className="text-right flex-shrink-0">
@@ -309,29 +436,52 @@ function SavingsCard({ saving, transactions, wallets, onRefetch, t }) {
           <span>Sisa {formatRupiah(Math.max(0, Number(saving.target_amount) - Number(saving.current_amount)))}</span>
         </div>
       </div>
+
+      {/* Action buttons */}
       <div className="flex border-t border-gray-50 dark:border-gray-700">
-        <button onClick={() => setExpanded(v => !v)} className="flex-1 py-2.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-center gap-1">
+        <button onClick={() => setExpanded(v => !v)}
+          className="flex-1 py-2.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-center gap-1">
           {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {t('history')} ({history.length})
         </button>
-        <button onClick={() => setShowEdit(true)} className="flex-1 py-2.5 text-xs text-blue-500 font-medium hover:bg-blue-50 dark:hover:bg-blue-900/30 border-l border-gray-50 dark:border-gray-700 flex items-center justify-center gap-1">
-          <Pencil size={11} /> {t('edit')}
-        </button>
+        {isOwner && (
+          <button onClick={() => setShowEdit(true)}
+            className="flex-1 py-2.5 text-xs text-blue-500 font-medium hover:bg-blue-50 dark:hover:bg-blue-900/30 border-l border-gray-50 dark:border-gray-700 flex items-center justify-center gap-1">
+            <Pencil size={11} /> {t('edit')}
+          </button>
+        )}
         {saving.status === 'active' && (
-          <button onClick={() => setShowDeposit(true)} className="flex-1 py-2.5 text-xs text-green-600 font-medium hover:bg-green-50 dark:hover:bg-green-900/30 border-l border-gray-50 dark:border-gray-700">
+          <button onClick={() => setShowDeposit(true)}
+            className="flex-1 py-2.5 text-xs text-green-600 font-medium hover:bg-green-50 dark:hover:bg-green-900/30 border-l border-gray-50 dark:border-gray-700">
             {t('depositWithdraw')}
           </button>
         )}
-        <button onClick={() => setShowDelete(true)} className="py-2.5 px-3 text-xs text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 border-l border-gray-50 dark:border-gray-700">
-          <Trash2 size={13} />
-        </button>
+        {isOwner && (
+          <button onClick={() => setShowShare(true)}
+            className="py-2.5 px-3 text-xs text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border-l border-gray-50 dark:border-gray-700 flex items-center justify-center">
+            <Users size={13} />
+          </button>
+        )}
+        {isOwner && (
+          <button onClick={() => setShowDelete(true)}
+            className="py-2.5 px-3 text-xs text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 border-l border-gray-50 dark:border-gray-700">
+            <Trash2 size={13} />
+          </button>
+        )}
       </div>
+
+      {/* Transaction history */}
       {expanded && history.length > 0 && (
         <div className="border-t border-gray-50 dark:border-gray-700 divide-y divide-gray-50 dark:divide-gray-700">
           {history.map(tx => (
             <div key={tx.id} className="flex items-center justify-between px-4 py-2">
               <div>
                 <p className="text-xs text-gray-600 dark:text-gray-300">{tx.note || (tx.type === 'deposit' ? t('deposit') : t('withdraw'))}</p>
-                <p className="text-xs text-gray-400">{formatDate(tx.trx_date)}</p>
+                <p className="text-xs text-gray-400">
+                  {formatDate(tx.trx_date)}
+                  {isShared && tx.user_id && memberNameMap[tx.user_id]
+                    ? ` · ${memberNameMap[tx.user_id]}`
+                    : ''}
+                </p>
               </div>
               <p className={`text-xs font-semibold ${tx.type === 'deposit' ? 'text-green-600' : 'text-orange-500'}`}>
                 {tx.type === 'deposit' ? '+' : '-'}{formatRupiah(Number(tx.amount))}
@@ -340,25 +490,41 @@ function SavingsCard({ saving, transactions, wallets, onRefetch, t }) {
           ))}
         </div>
       )}
+      {expanded && history.length === 0 && (
+        <div className="border-t border-gray-50 dark:border-gray-700 px-4 py-3 text-center text-xs text-gray-400">{t('noData')}</div>
+      )}
+
       {showDeposit && <Modal onClose={() => setShowDeposit(false)}><DepositForm saving={saving} wallets={wallets} onSave={onRefetch} onClose={() => setShowDeposit(false)} t={t} /></Modal>}
-      {showEdit && <Modal onClose={() => setShowEdit(false)}><SavingsForm initial={saving} onSave={onRefetch} onClose={() => setShowEdit(false)} t={t} /></Modal>}
-      {showDelete && <Modal onClose={() => setShowDelete(false)}><DeleteSavingsModal saving={saving} wallets={wallets} onSave={onRefetch} onClose={() => setShowDelete(false)} t={t} /></Modal>}
+      {showEdit && isOwner && <Modal onClose={() => setShowEdit(false)}><SavingsForm initial={saving} onSave={onRefetch} onClose={() => setShowEdit(false)} t={t} /></Modal>}
+      {showDelete && isOwner && <Modal onClose={() => setShowDelete(false)}><DeleteSavingsModal saving={saving} wallets={wallets} onSave={onRefetch} onClose={() => setShowDelete(false)} t={t} /></Modal>}
+      {showShare && isOwner && (
+        <Modal onClose={() => setShowShare(false)}>
+          <ShareModal saving={saving} currentUser={currentUser} currentProfile={currentProfile} members={members} onRefetch={onRefetch} onClose={() => setShowShare(false)} t={t} />
+        </Modal>
+      )}
     </div>
   );
 }
 
 export default function Savings() {
-  const { user, t } = useApp();
+  const { user, profile, t } = useApp();
   const { data: savings = [], loading, refetch: refetchSavings } = useQuery(fetchSavings, [user?.id]);
   const { data: transactions = [], refetch: refetchTrx } = useQuery(fetchSavingsTransactions, [user?.id]);
   const { data: wallets = [] } = useQuery(fetchWallets, [user?.id]);
+  const { data: allMembers = [], refetch: refetchMembers } = useQuery(fetchSavingsMembers, [user?.id]);
   const [showModal, setShowModal] = useState(false);
   const [filter, setFilter] = useState('active');
 
-  const handleRefetch = () => { refetchSavings(); refetchTrx(); };
+  const membersBySavings = useMemo(() =>
+    allMembers.reduce((acc, m) => {
+      (acc[m.savings_id] ??= []).push(m);
+      return acc;
+    }, {}), [allMembers]);
+
+  const handleRefetch = () => { refetchSavings(); refetchTrx(); refetchMembers(); };
   const filtered = savings.filter(s => filter === 'all' || s.status === filter);
-  const totalSaved = savings.filter(s => s.status !== 'cancelled').reduce((s, sv) => s + Number(sv.current_amount), 0);
-  const totalTarget = savings.filter(s => s.status !== 'cancelled').reduce((s, sv) => s + Number(sv.target_amount), 0);
+  const totalSaved = savings.filter(s => s.status !== 'cancelled' && s.user_id === user?.id).reduce((s, sv) => s + Number(sv.current_amount), 0);
+  const totalTarget = savings.filter(s => s.status !== 'cancelled' && s.user_id === user?.id).reduce((s, sv) => s + Number(sv.target_amount), 0);
 
   if (loading) return <Spinner />;
 
@@ -395,7 +561,19 @@ export default function Savings() {
           ? <div className="bg-white dark:bg-gray-800 rounded-2xl py-12 text-center text-gray-400 text-sm border border-gray-100 dark:border-gray-700">
               {filter === 'active' ? t('noActiveSavings') : t('noData')}
             </div>
-          : filtered.map(s => <SavingsCard key={s.id} saving={s} transactions={transactions} wallets={wallets} onRefetch={handleRefetch} t={t} />)
+          : filtered.map(s => (
+              <SavingsCard
+                key={s.id}
+                saving={s}
+                transactions={transactions}
+                wallets={wallets}
+                members={membersBySavings[s.id] ?? []}
+                currentUser={user}
+                currentProfile={profile}
+                onRefetch={handleRefetch}
+                t={t}
+              />
+            ))
         }
       </div>
       {showModal && (

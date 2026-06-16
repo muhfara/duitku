@@ -114,6 +114,32 @@ export async function createDebtPayment(payload) {
   return data;
 }
 
+export async function updateDebtPayment(id, payload) {
+  const { data, error } = await insforge.database
+    .from('debt_payments').update(payload).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function deleteDebtPayment(id) {
+  const { error } = await insforge.database
+    .from('debt_payments').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// Recalculate debt remaining & status from all payments (used after edit/delete payment)
+export async function recalcDebtRemaining(debtId, debtAmount) {
+  const { data: pays } = await insforge.database
+    .from('debt_payments').select('amount').eq('debt_id', debtId);
+  const totalPaid = (pays ?? []).reduce((s, p) => s + Number(p.amount), 0);
+  const remaining = Math.max(0, Number(debtAmount) - totalPaid);
+  const status = remaining === 0 ? 'paid' : totalPaid > 0 ? 'partial' : 'unpaid';
+  const { data, error } = await insforge.database
+    .from('debts').update({ remaining, status }).eq('id', debtId).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 // ---- Wallets ----
 export async function fetchWallets() {
   const { data, error } = await insforge.database
@@ -147,6 +173,43 @@ export async function fetchSavings() {
     .from('savings').select().order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return data ?? [];
+}
+
+export async function fetchSavingsMembers() {
+  const { data, error } = await insforge.database
+    .from('savings_members').select().order('created_at');
+  if (error) throw new Error(error.message);
+  const members = data ?? [];
+  if (!members.length) return [];
+
+  const ids = [...new Set(members.map(m => m.user_id))];
+  const { data: profiles } = await insforge.database
+    .from('profiles').select('id, full_name, email').in('id', ids);
+  const profileMap = Object.fromEntries((profiles ?? []).map(p => [p.id, p]));
+  return members.map(m => ({ ...m, profile: profileMap[m.user_id] ?? null }));
+}
+
+export async function findProfileByEmail(email) {
+  const { data } = await insforge.database
+    .from('profiles').select('id, full_name, email')
+    .eq('email', email.trim().toLowerCase()).single();
+  return data ?? null;
+}
+
+export async function addSavingsMember(savingsId, userId) {
+  const { data, error } = await insforge.database
+    .from('savings_members')
+    .insert([{ savings_id: savingsId, user_id: userId, role: 'member' }])
+    .select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function removeSavingsMember(savingsId, userId) {
+  const { error } = await insforge.database
+    .from('savings_members').delete()
+    .eq('savings_id', savingsId).eq('user_id', userId);
+  if (error) throw new Error(error.message);
 }
 
 export async function fetchSavingsTransactions() {
