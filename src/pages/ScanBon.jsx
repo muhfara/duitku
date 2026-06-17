@@ -35,20 +35,13 @@ async function analyzeReceipt(imageBase64, mediaType, categories) {
 Kategori pengeluaran yang tersedia (gunakan id-nya):
 ${catList || '(tidak ada kategori)'}
 
-Ekstrak informasi dari struk dan kembalikan HANYA JSON valid berikut, tanpa teks lain:
-{
-  "store_name": "nama toko atau merchant",
-  "date": "tanggal dalam format YYYY-MM-DD (gunakan hari ini jika tidak terbaca)",
-  "total_amount": total_belanja_dalam_angka_rupiah,
-  "items": [{"name": "nama item", "price": harga_dalam_angka}],
-  "category_id": "id_kategori_paling_sesuai_dari_daftar_di_atas_atau_string_kosong",
-  "note": "nama toko singkat untuk catatan transaksi"
-}
+Ekstrak informasi dari struk dan kembalikan HANYA JSON valid berikut (tanpa markdown, tanpa kode blok, tanpa teks lain):
+{"store_name":"nama toko","date":"YYYY-MM-DD","total_amount":0,"items":[{"name":"item","price":0}],"category_id":"","note":"catatan singkat"}
 
-Jika struk tidak terbaca jelas, tetap berikan estimasi terbaik berdasarkan apa yang terlihat.`;
+Gunakan tanggal hari ini jika tidak terbaca. Jika struk tidak jelas, tetap berikan estimasi terbaik.`;
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -59,7 +52,7 @@ Jika struk tidak terbaca jelas, tetap berikan estimasi terbaik berdasarkan apa y
             { text: prompt },
           ],
         }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
+        generationConfig: { temperature: 0.1, maxOutputTokens: 1024, responseMimeType: 'application/json' },
       }),
     }
   );
@@ -70,11 +63,22 @@ Jika struk tidak terbaca jelas, tetap berikan estimasi terbaik berdasarkan apa y
   }
 
   const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('AI tidak mengembalikan data yang valid');
 
-  return JSON.parse(match[0]);
+  // Gabungkan semua parts (thinking model bisa punya multiple parts)
+  const parts = data.candidates?.[0]?.content?.parts ?? [];
+  const text = parts.map(p => p.text ?? '').join('').trim();
+
+  if (!text) throw new Error('AI tidak memberikan respons. Coba lagi.');
+
+  // Cari JSON object dalam teks (bisa terbungkus markdown atau teks lain)
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error(`Respons AI tidak mengandung data JSON. Respons: ${text.slice(0, 100)}`);
+
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    throw new Error('Format JSON dari AI tidak valid. Coba foto ulang dengan gambar lebih jelas.');
+  }
 }
 
 export default function ScanBon() {
